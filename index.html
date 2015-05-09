@@ -23,24 +23,56 @@ html, body, #mapdiv {height: 100%; width: 100%;}
 <script>
 var std = L.tileLayer(
   'http://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png', {
-    attribution: "地理院タイル（標準地図）"
+    attribution: "地理院タイル（標準地図）", maxNativeZoom: 18, maxZoom: 20
   });
 var markers = new L.MarkerClusterGroup();
-var fc = L.tileLayer.canvas();
 var paths =  [];
 var ids = [];
+var icons = {
+  '電子基準点': L.icon({
+    iconUrl: "http://cyberjapandata.gsi.go.jp/portal/sys/v4/symbols/476.png",
+    iconSize: [20,20], iconAnchor: [10,10]
+  }),
+  '経緯度原点': L.icon({
+    iconUrl: "http://portal.cyberjapan.jp/sys/v4/symbols/205.png",
+    iconSize: [20,20], iconAnchor: [10,10]
+  }),
+  '一等三角点': L.icon({
+    iconUrl: "http://portal.cyberjapan.jp/sys/v4/symbols/201.png",
+    iconSize: [20,20], iconAnchor: [10,10]
+  }),
+  '二等三角点': L.icon({
+    iconUrl: "http://portal.cyberjapan.jp/sys/v4/symbols/202.png",
+    iconSize: [20,20], iconAnchor: [10,10]
+  }),
+  '三等三角点': L.icon({
+    iconUrl: "http://portal.cyberjapan.jp/sys/v4/symbols/203.png",
+    iconSize: [20,20], iconAnchor: [10,10]
+  }),
+  '二等水準点': L.icon({
+    iconUrl: "http://portal.cyberjapan.jp/sys/v4/symbols/207.png",
+    iconSize: [20,20], iconAnchor: [10,10]
+  })
+};
+var fc = L.tileLayer.canvas();
+var default_icon = L.icon({
+  iconUrl: "http://portal.cyberjapan.jp/sys/v4/symbols/206.png",
+  iconSize: [20,20], iconAnchor: [10,10]
+});
 fc.drawTile = function(canvas, tilePoint, zoom) {
-  while(zoom > 12) {
+  while(zoom > 15) {
     zoom -= 1;
     tilePoint.x >>= 1;
     tilePoint.y >>= 1;
   }
-  if(zoom >= 7) {
-    path = zoom + '/' + tilePoint.x + '/' + tilePoint.y;
-    if(paths.indexOf(path) == -1) {
-      paths.push(path);
-      corslite('http://cyberjapandata.gsi.go.jp/xyz/cp/' + path +
-        '.geojson', function(err, resp) {
+  path = zoom + '/' + tilePoint.x + '/' + tilePoint.y;
+  if(paths.indexOf(path) == -1) {
+    paths.push(path);
+    // Control Points
+    if(zoom >= 7) {
+      corslite(
+        'http://cyberjapandata.gsi.go.jp/xyz/cp/' + path + '.geojson',
+        function(err, resp) {
           if(err) return;
           var geojson = JSON.parse(resp.response);
           for(i in geojson.features) {
@@ -48,20 +80,71 @@ fc.drawTile = function(canvas, tilePoint, zoom) {
             var id = f.properties.基準点コード;  
             //console.log(f);
             if(ids.indexOf(id) == -1) {
+              ids.push(id);
               markers.addLayer(new L.Marker(
-                f.geometry.coordinates.reverse()
+                f.geometry.coordinates.reverse(),
+                {icon: icons[f.properties.基準点種別] || default_icon}
               ).bindPopup(
                 f.properties.基準点種別 + ' ' +
                 (f.properties.点番号 || f.properties.点名) + '<br/>' +
                 id
               ));
-              ids.push(id);
-            } else {
             }
           }
-        }, true);
-    } else {
-      // console.log(path + ' is already there.');
+        },
+        true
+      );
+    };
+    // Kunijiban
+    if(zoom == 15) {
+      corslite(
+        'http://cyberjapandata.gsi.go.jp/xyz/kunijiban/' + path + '.geojson',
+        function(err, resp) {
+          if(err) return;
+          var geojson = JSON.parse(resp.response);
+          for(i in geojson.features) {
+            var f = geojson.features[i];
+            var id = f.properties.ボーリングID;
+            if(ids.indexOf(id) == -1) {
+              ids.push(id);
+              markers.addLayer(new L.circleMarker(
+                f.geometry.coordinates.reverse(),
+                {
+                  color: f.properties.柱状図表示URL.match('pari') ?
+                    '#0f0' : '#00f', 
+                  radius: 6, opacity: 1
+                }
+              ).bindPopup("<span style='font-size: 13px;'>ボーリングデータ</span>（<a style='font-size: 13px;' target='_blank' href='http://www.kunijiban.pwri.go.jp/jp/'>Kunijiban</a>）<table border='1'><tr><td width='80' style='font-size: 13px;'>ボーリングID</td><td>" + (f.properties['ボーリングID'] || "-") + "</td></tr><tr><td style='font-size: 13px;'>事業工事名</td><td>" + (f.properties['事業工事名'] || "-") + "</td></tr><tr><td style='font-size: 13px;'>調査名</td><td>" + (f.properties['調査名'] || "-") + "</td></tr><tr><td style='font-size: 13px;'>情報提供者</td><td>" + (f.properties['発注機関名称'] || "-") + "</td></tr><tr><td style='font-size: 13px;'>北緯</td><td>" + (f.properties['北緯'] || "-") + "</td></tr><tr><td style='font-size: 13px;'>東経</td><td>" + (f.properties['東経'] || "-") + "</td></tr><tr><td style='font-size: 13px;'>調査終了年月</td><td>" + (f.properties['調査終了年月'] || "-") + "</td></tr><tr><td style='font-size: 13px;'>標高(m)</td><td>" + (f.properties['標高(m)'] || "-") + "</td></tr><tr><td style='font-size: 13px;'>総掘進長(m)</td><td>" + (f.properties['総掘進長(m)'] || "-") + "</td></tr><tr><td style='font-size: 13px;'>柱状図</td><td>" + (f.properties['柱状図表示URL'] ? "<a target='_blank' href='" + f.properties['柱状図表示URL'] + "'>表示</a>" : "-") + (f.properties['柱状図データURL'] && !f.properties['柱状図表示URL'].match('pari') ? "　<a target='_blank' href='" + f.properties['柱状図データURL'] + "'>XML</a>" : '') + "</td></tr><tr><td style='font-size: 13px;'>土質試験結果</td><td>" + (f.properties['土質試験結果一覧URL'] ? (!f.properties['土質試験結果一覧URL'].match('pari') ? "<a target='_blank' href='" + f.properties['土質試験結果一覧URL'] + "'>XML</a>" : "<a target='_blank' href='" + f.properties['土質試験結果一覧URL'] + "'>表示</a>") : "-") + "</td></tr></table><a style='font-size: 13px;' target='_blank' href='http://www.kunijiban.pwri.go.jp/jp/terms.html'>利用規約</a>"));
+            }
+          }
+        },
+        true
+      )
+    };
+    // Photos
+    if(zoom == 14) {
+      corslite(
+        'http://cyberjapandata.gsi.go.jp/xyz/pp/' + path + '.geojson',
+        function(err, resp) {
+          if(err) return;
+          var geojson = JSON.parse(resp.response);
+          for(i in geojson.features) {
+            var f = geojson.features[i];
+            var id = f.properties.ID;
+            if(ids.indexOf(id) == -1) {
+              ids.push(id);
+              markers.addLayer(new L.circleMarker(
+                f.geometry.coordinates.reverse(),
+                {
+                  radius: 6, color: '#f00', opacity: 0.8,
+                  fillOpacity: 0.8, fillColor: '#f55'
+                }
+              ).bindPopup(L.popup({maxWidth: 800, minWidth: 800, keepInView: true}).setContent("<iframe src=\'http://mapps.gsi.go.jp/map-lib-api/apiContentsView.do?specificationId=" + f.properties["ID"] + "&isDetail=true\' style='width: 100%; height: 600px'></iframe>")));
+            }
+          }
+        },
+        true
+      )
     }
   }
 };
