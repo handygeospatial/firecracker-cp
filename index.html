@@ -1,0 +1,78 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title></title>
+<meta name="viewport" content="initial-scale=1.0, maximum-scale=1.0"/>
+<link rel="stylesheet" href="http://cdn.leafletjs.com/leaflet-0.7.3/leaflet.css"/>
+<link rel="stylesheet" href="http://leaflet.github.io/Leaflet.markercluster/dist/MarkerCluster.css" />
+<link rel="stylesheet" href="http://leaflet.github.io/Leaflet.markercluster/dist/MarkerCluster.Default.css" />
+<script src="http://cdn.leafletjs.com/leaflet-0.7.3/leaflet.js"></script>
+<script src="http://handygeospatial.github.io/mapsites/js/leaflet-hash.js"></script>
+<script src="http://handygeospatial.github.io/mapsites/js/TileLayer.GeoJSON.js"></script>
+<script src="http://handygeospatial.github.io/mapsites/js/corslite.js"></script>
+<script src="http://leaflet.github.io/Leaflet.markercluster/dist/leaflet.markercluster.js"></script>
+<style>
+body {padding: 0; margin: 0}
+html, body, #mapdiv {height: 100%; width: 100%;}
+.leaflet-container {background: #fff;}
+</style>
+</head>
+<body>
+<div id="mapdiv">
+<script>
+var std = L.tileLayer(
+  'http://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png', {
+    attribution: "地理院タイル（標準地図）"
+  });
+var markers = new L.MarkerClusterGroup();
+var fc = L.tileLayer.canvas();
+var paths =  [];
+var ids = [];
+fc.drawTile = function(canvas, tilePoint, zoom) {
+  while(zoom > 12) {
+    zoom -= 1;
+    tilePoint.x >>= 1;
+    tilePoint.y >>= 1;
+  }
+  if(zoom >= 7) {
+    path = zoom + '/' + tilePoint.x + '/' + tilePoint.y;
+    if(paths.indexOf(path) == -1) {
+      paths.push(path);
+      corslite('http://cyberjapandata.gsi.go.jp/xyz/cp/' + path +
+        '.geojson', function(err, resp) {
+          if(err) return;
+          var geojson = JSON.parse(resp.response);
+          for(i in geojson.features) {
+            var f = geojson.features[i];
+            var id = f.properties.基準点コード;  
+            //console.log(f);
+            if(ids.indexOf(id) == -1) {
+              markers.addLayer(new L.Marker(
+                f.geometry.coordinates.reverse()
+              ).bindPopup(
+                f.properties.基準点種別 + ' ' +
+                (f.properties.点番号 || f.properties.点名) + '<br/>' +
+                id
+              ));
+              ids.push(id);
+            } else {
+            }
+          }
+        }, true);
+    } else {
+      // console.log(path + ' is already there.');
+    }
+  }
+};
+
+var map = L.map('mapdiv', {
+  center: [35.3622222, 138.7313889], zoom: 5,
+  layers: [std, fc, markers]});
+
+var hash = L.hash(map);
+L.control.layers({'地理院タイル（標準地図）': std},
+  {'canvas': fc, 'markers': markers}).addTo(map);
+</script>
+</body>
+</html>
